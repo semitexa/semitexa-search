@@ -19,7 +19,7 @@ final class OrmSearchBackend implements SearchBackendInterface
     private OrmRankingStrategy $rankingStrategy;
 
     public function __construct(
-        private OrmSearchQueryFactoryInterface $queryFactory,
+        private ?OrmSearchQueryFactoryInterface $queryFactory = null,
     ) {
         $this->translator = new OrmSearchTranslator();
         $this->rankingStrategy = new OrmRankingStrategy();
