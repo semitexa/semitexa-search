@@ -27,7 +27,7 @@ final class OrmSearchBackend implements SearchBackendInterface
 
     public function supports(SearchIndexDefinition $definition): bool
     {
-        return $definition->backend === 'orm';
+        return $definition->backend === 'orm' && $this->queryFactory !== null;
     }
 
     public function search(SearchIndexDefinition $definition, SearchRequest $request): SearchResult
@@ -35,6 +35,12 @@ final class OrmSearchBackend implements SearchBackendInterface
         $startTime = hrtime(true);
 
         try {
+            if ($this->queryFactory === null) {
+                throw new SearchBackendException(
+                    "ORM backend is not available for index '{$definition->name}' because no query factory is configured.",
+                );
+            }
+
             $query = $this->queryFactory->createQuery($definition);
             $query = $this->translator->apply($query, $definition, $request);
 
