@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Backend\Orm;
 
+use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Attributes\SatisfiesServiceContract;
 use Semitexa\Search\Contract\SearchBackendInterface;
 use Semitexa\Search\Exception\SearchBackendException;
@@ -15,15 +16,9 @@ use Semitexa\Search\Value\SearchResult;
 #[SatisfiesServiceContract(of: SearchBackendInterface::class)]
 final class OrmSearchBackend implements SearchBackendInterface
 {
-    private OrmSearchTranslator $translator;
-    private OrmRankingStrategy $rankingStrategy;
-
-    public function __construct(
-        private ?OrmSearchQueryFactoryInterface $queryFactory = null,
-    ) {
-        $this->translator = new OrmSearchTranslator();
-        $this->rankingStrategy = new OrmRankingStrategy();
-    }
+    protected ?OrmSearchQueryFactoryInterface $queryFactory = null;
+    private ?OrmSearchTranslator $translator = null;
+    private ?OrmRankingStrategy $rankingStrategy = null;
 
     public function supports(SearchIndexDefinition $definition): bool
     {
@@ -32,6 +27,8 @@ final class OrmSearchBackend implements SearchBackendInterface
 
     public function search(SearchIndexDefinition $definition, SearchRequest $request): SearchResult
     {
+        $translator = $this->translator ??= new OrmSearchTranslator();
+        $rankingStrategy = $this->rankingStrategy ??= new OrmRankingStrategy();
         $startTime = hrtime(true);
 
         try {
@@ -42,15 +39,15 @@ final class OrmSearchBackend implements SearchBackendInterface
             }
 
             $query = $this->queryFactory->createQuery($definition);
-            $query = $this->translator->apply($query, $definition, $request);
+            $query = $translator->apply($query, $definition, $request);
 
             $rows = $query->fetchAll();
             $total = $query->count();
 
-            $hits = $this->mapHits($definition, $rows, $request->query);
+            $hits = $this->mapHits($definition, $rows, $request->query, $rankingStrategy);
 
             if ($request->query !== null) {
-                $hits = $this->rankingStrategy->sortByRelevance($hits);
+                $hits = $rankingStrategy->sortByRelevance($hits);
             }
 
             $elapsedMs = (hrtime(true) - $startTime) / 1_000_000;
@@ -88,12 +85,13 @@ final class OrmSearchBackend implements SearchBackendInterface
         SearchIndexDefinition $definition,
         array $rows,
         ?string $query,
+        OrmRankingStrategy $rankingStrategy,
     ): array {
         $hits = [];
 
         foreach ($rows as $row) {
             $rowArray = $this->objectToArray($row);
-            $score = $this->rankingStrategy->score($definition, $rowArray, $query);
+            $score = $rankingStrategy->score($definition, $rowArray, $query);
 
             $fields = [];
             foreach ($definition->fields as $field) {

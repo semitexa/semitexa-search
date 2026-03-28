@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Service;
 
+use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Attributes\SatisfiesServiceContract;
 use Semitexa\Search\Configuration\SearchConfig;
 use Semitexa\Search\Contract\SearchBackendInterface;
@@ -23,36 +24,32 @@ use Semitexa\Tenancy\Context\TenantContext;
 #[SatisfiesServiceContract(of: SearchManagerInterface::class)]
 final class SearchManager implements SearchManagerInterface
 {
-    private SearchConfig $config;
-    private SearchFilterNormalizer $filterNormalizer;
-    private SearchTextParser $textParser;
-    private SearchRequestFactory $requestFactory;
-    private SearchQueryPlannerInterface $planner;
+    #[InjectAsReadonly]
+    protected SearchIndexRegistryInterface $registry;
 
-    public function __construct(
-        private SearchIndexRegistryInterface $registry,
-        private SearchBackendInterface $backend,
-        ?SearchQueryPlannerInterface $planner = null,
-        ?SearchConfig $config = null,
-    ) {
-        $this->config = $config ?? SearchConfig::fromEnvironment();
-        $this->planner = $planner ?? new NoOpSearchQueryPlanner();
-        $this->filterNormalizer = new SearchFilterNormalizer();
-        $this->textParser = new SearchTextParser();
-        $this->requestFactory = new SearchRequestFactory($this->config);
-    }
+    #[InjectAsReadonly]
+    protected SearchBackendInterface $backend;
+
+    private ?SearchConfig $config = null;
+    private ?SearchFilterNormalizer $filterNormalizer = null;
+    private ?SearchTextParser $textParser = null;
+    private ?SearchRequestFactory $requestFactory = null;
+    private ?SearchQueryPlannerInterface $planner = null;
 
     public function search(SearchRequest $request): SearchResult
     {
+        $config = $this->config ??= SearchConfig::fromEnvironment();
+        $filterNormalizer = $this->filterNormalizer ??= new SearchFilterNormalizer();
+        $planner = $this->planner ??= new NoOpSearchQueryPlanner();
         $definition = $this->registry->get($request->index);
 
         $request = $this->enforceTenantScope($request, $definition->requiresTenantScope());
 
-        $normalizedFilters = $this->filterNormalizer->normalize($definition, $request->filters);
+        $normalizedFilters = $filterNormalizer->normalize($definition, $request->filters);
         $request = $request->with(filters: $normalizedFilters);
 
-        if ($this->shouldUsePlanner($definition, $request)) {
-            $request = $this->applyPlanner($definition, $request);
+        if ($this->shouldUsePlanner($definition, $request, $config)) {
+            $request = $this->applyPlanner($definition, $request, $config, $planner);
         }
 
         if (!$this->backend->supports($definition)) {
@@ -73,13 +70,15 @@ final class SearchManager implements SearchManagerInterface
         int $limit = 20,
         array $filters = [],
     ): SearchResult {
+        $textParser = $this->textParser ??= new SearchTextParser();
+        $requestFactory = $this->requestFactory ??= new SearchRequestFactory($this->config ??= SearchConfig::fromEnvironment());
         $definition = $this->registry->get($index);
 
-        $parsed = $this->textParser->parse($definition, $rawQuery);
+        $parsed = $textParser->parse($definition, $rawQuery);
 
         $mergedFilters = array_merge($parsed['filters'], $filters);
 
-        $request = $this->requestFactory->create(
+        $request = $requestFactory->create(
             index: $index,
             query: $parsed['query'],
             filters: $mergedFilters,
@@ -112,8 +111,9 @@ final class SearchManager implements SearchManagerInterface
     private function shouldUsePlanner(
         \Semitexa\Search\Index\SearchIndexDefinition $definition,
         SearchRequest $request,
+        SearchConfig $config,
     ): bool {
-        if (!$this->config->plannerEnabled) {
+        if (!$config->plannerEnabled) {
             return false;
         }
 
@@ -131,14 +131,16 @@ final class SearchManager implements SearchManagerInterface
     private function applyPlanner(
         \Semitexa\Search\Index\SearchIndexDefinition $definition,
         SearchRequest $request,
+        SearchConfig $config,
+        SearchQueryPlannerInterface $planner,
     ): SearchRequest {
         $policy = new SearchPlannerPolicy(
-            minConfidence: $this->config->plannerMinConfidence,
-            timeoutMs: $this->config->plannerTimeoutMs,
+            minConfidence: $config->plannerMinConfidence,
+            timeoutMs: $config->plannerTimeoutMs,
         );
 
         try {
-            $result = $this->planner->plan($definition, $request, $policy);
+            $result = $planner->plan($definition, $request, $policy);
         } catch (\Throwable $e) {
             return $request->with(
                 plannerTrace: new SearchPlannerTrace(
@@ -150,7 +152,7 @@ final class SearchManager implements SearchManagerInterface
             );
         }
 
-        if (!$result->isUsable($this->config->plannerMinConfidence)) {
+        if (!$result->isUsable($config->plannerMinConfidence)) {
             $trace = $result->trace ?? new SearchPlannerTrace(
                 plannerName: $result->plannerName,
                 confidence: $result->confidence,
