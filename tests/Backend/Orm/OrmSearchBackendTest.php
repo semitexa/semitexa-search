@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Backend\Orm;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Orm\Query\SelectQuery;
 use Semitexa\Search\Backend\Orm\OrmSearchBackend;
+use Semitexa\Search\Backend\Orm\OrmSearchQueryInterface;
 use Semitexa\Search\Backend\Orm\OrmSearchQueryFactoryInterface;
 use Semitexa\Search\Enum\SearchFieldType;
 use Semitexa\Search\Exception\SearchBackendException;
@@ -35,11 +35,13 @@ final class OrmSearchBackendTest extends TestCase
 
     public function testSupportsReturnsTrueWhenOrmFactoryIsConfigured(): void
     {
-        $query = $this->createMock(SelectQuery::class);
+        $query = $this->createMock(OrmSearchQueryInterface::class);
         $factory = $this->createMock(OrmSearchQueryFactoryInterface::class);
         $factory->method('createQuery')->willReturn($query);
 
-        $backend = new OrmSearchBackend($factory);
+        $backend = new OrmSearchBackend();
+        $property = new \ReflectionProperty($backend, 'queryFactory');
+        $property->setValue($backend, $factory);
 
         self::assertTrue($backend->supports($this->definition()));
     }

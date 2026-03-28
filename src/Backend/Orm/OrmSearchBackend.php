@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Backend\Orm;
 
-use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Attributes\SatisfiesServiceContract;
 use Semitexa\Search\Contract\SearchBackendInterface;
 use Semitexa\Search\Exception\SearchBackendException;
