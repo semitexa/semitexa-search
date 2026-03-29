@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Backend\Orm;
 
-use Semitexa\Orm\Query\SelectQuery;
 use Semitexa\Search\Enum\SearchFieldType;
 use Semitexa\Search\Enum\SearchMatchStrategy;
 use Semitexa\Search\Enum\SearchScope;
@@ -16,13 +15,13 @@ final class OrmSearchTranslator
 {
     /**
      * Apply tenant scope, filters, text query predicates, sorting, and pagination
-     * to a SelectQuery based on the search request and index definition.
+     * to an ORM query based on the search request and index definition.
      */
     public function apply(
-        SelectQuery $query,
+        OrmSearchQueryInterface $query,
         SearchIndexDefinition $definition,
         SearchRequest $request,
-    ): SelectQuery {
+    ): OrmSearchQueryInterface {
         $query = $this->applyTenantScope($query, $request);
         $query = $this->applyFilters($query, $definition, $request);
         $query = $this->applyTextQuery($query, $definition, $request);
@@ -32,7 +31,7 @@ final class OrmSearchTranslator
         return $query;
     }
 
-    private function applyTenantScope(SelectQuery $query, SearchRequest $request): SelectQuery
+    private function applyTenantScope(OrmSearchQueryInterface $query, SearchRequest $request): OrmSearchQueryInterface
     {
         if ($request->scope === SearchScope::Tenant && $request->tenantId !== null) {
             $query = $query->where('tenant_id', '=', $request->tenantId);
@@ -42,10 +41,10 @@ final class OrmSearchTranslator
     }
 
     private function applyFilters(
-        SelectQuery $query,
+        OrmSearchQueryInterface $query,
         SearchIndexDefinition $definition,
         SearchRequest $request,
-    ): SelectQuery {
+    ): OrmSearchQueryInterface {
         foreach ($request->filters as $fieldName => $value) {
             $field = $definition->getField($fieldName);
 
@@ -61,11 +60,11 @@ final class OrmSearchTranslator
     }
 
     private function applyFilterValue(
-        SelectQuery $query,
+        OrmSearchQueryInterface $query,
         string $column,
         SearchFieldDefinition $field,
         mixed $value,
-    ): SelectQuery {
+    ): OrmSearchQueryInterface {
         if (is_array($value) && (array_key_exists('from', $value) || array_key_exists('to', $value))) {
             return $this->applyRangeFilter($query, $column, $value);
         }
@@ -80,7 +79,7 @@ final class OrmSearchTranslator
     /**
      * @param array{from?: scalar, to?: scalar} $range
      */
-    private function applyRangeFilter(SelectQuery $query, string $column, array $range): SelectQuery
+    private function applyRangeFilter(OrmSearchQueryInterface $query, string $column, array $range): OrmSearchQueryInterface
     {
         if (isset($range['from']) && isset($range['to'])) {
             return $query->whereBetween($column, $range['from'], $range['to']);
@@ -98,10 +97,10 @@ final class OrmSearchTranslator
     }
 
     private function applyTextQuery(
-        SelectQuery $query,
+        OrmSearchQueryInterface $query,
         SearchIndexDefinition $definition,
         SearchRequest $request,
-    ): SelectQuery {
+    ): OrmSearchQueryInterface {
         if ($request->query === null) {
             return $query;
         }
@@ -133,10 +132,10 @@ final class OrmSearchTranslator
     }
 
     private function applySorting(
-        SelectQuery $query,
+        OrmSearchQueryInterface $query,
         SearchIndexDefinition $definition,
         SearchRequest $request,
-    ): SelectQuery {
+    ): OrmSearchQueryInterface {
         if (!empty($request->sort)) {
             foreach ($request->sort as $clause) {
                 $field = $definition->getField($clause->field);
@@ -156,7 +155,7 @@ final class OrmSearchTranslator
         return $query;
     }
 
-    private function applyPagination(SelectQuery $query, SearchRequest $request): SelectQuery
+    private function applyPagination(OrmSearchQueryInterface $query, SearchRequest $request): OrmSearchQueryInterface
     {
         return $query->limit($request->limit)->offset($request->offset);
     }
