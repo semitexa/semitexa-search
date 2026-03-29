@@ -36,22 +36,6 @@ final class SearchManager implements SearchManagerInterface
     private ?SearchRequestFactory $requestFactory = null;
     private ?SearchQueryPlannerInterface $planner = null;
 
-    public function __construct(
-        ?SearchIndexRegistryInterface $registry = null,
-        ?SearchBackendInterface $backend = null,
-        ?SearchQueryPlannerInterface $planner = null,
-    ) {
-        if ($registry !== null) {
-            $this->registry = $registry;
-        }
-
-        if ($backend !== null) {
-            $this->backend = $backend;
-        }
-
-        $this->planner = $planner;
-    }
-
     public function search(SearchRequest $request): SearchResult
     {
         $config = $this->config ??= SearchConfig::fromEnvironment();

@@ -19,16 +19,6 @@ final class OrmSearchBackend implements SearchBackendInterface
     private ?OrmSearchTranslator $translator = null;
     private ?OrmRankingStrategy $rankingStrategy = null;
 
-    public function __construct(
-        ?OrmSearchQueryFactoryInterface $queryFactory = null,
-        ?OrmSearchTranslator $translator = null,
-        ?OrmRankingStrategy $rankingStrategy = null,
-    ) {
-        $this->queryFactory = $queryFactory;
-        $this->translator = $translator;
-        $this->rankingStrategy = $rankingStrategy;
-    }
-
     public function supports(SearchIndexDefinition $definition): bool
     {
         return $definition->backend === 'orm' && $this->queryFactory !== null;
