@@ -1,7 +1,7 @@
 {
     "name": "semitexa/search",
     "description": "Semitexa Search - structured search contracts, tenant-aware scoping, ORM backend, and optional LLM query planning",
-    "version": "1.0.0",
+    "version": "v1.0.2",
     "type": "semitexa-module",
     "license": "MIT",
     "authors": [
