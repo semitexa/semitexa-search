@@ -1,4 +1,4 @@
-# semitexa/search
+# Semitexa Search
 
 Structured search with tenant-aware scoping, ORM backend, and optional LLM query planning.
 
