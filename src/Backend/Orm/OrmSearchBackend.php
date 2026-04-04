@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Backend\Orm;
 
-use Semitexa\Core\Attributes\SatisfiesServiceContract;
+use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Search\Contract\SearchBackendInterface;
 use Semitexa\Search\Exception\SearchBackendException;
 use Semitexa\Search\Index\SearchIndexDefinition;

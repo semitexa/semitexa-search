@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Index;
 
-use Semitexa\Core\Attributes\SatisfiesServiceContract;
+use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Search\Contract\SearchIndexRegistryInterface;
 use Semitexa\Search\Exception\SearchIndexNotFoundException;
 
