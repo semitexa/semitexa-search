@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Value;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Search\Value\SortClause;
+use Semitexa\Search\Domain\Model\SortClause;
 
 final class SortClauseTest extends TestCase
 {

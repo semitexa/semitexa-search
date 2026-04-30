@@ -1,0 +1,183 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Semitexa\Search\Application\Service;
+
+use Semitexa\Core\Attribute\InjectAsReadonly;
+use Semitexa\Core\Attribute\SatisfiesServiceContract;
+use Semitexa\Search\Configuration\SearchConfig;
+use Semitexa\Search\Domain\Contract\SearchBackendInterface;
+use Semitexa\Search\Domain\Contract\SearchIndexRegistryInterface;
+use Semitexa\Search\Domain\Contract\SearchManagerInterface;
+use Semitexa\Search\Domain\Model\SearchPlannerPolicy;
+use Semitexa\Search\Domain\Contract\SearchQueryPlannerInterface;
+use Semitexa\Search\Domain\Enum\SearchScope;
+use Semitexa\Search\Exception\SearchBackendException;
+use Semitexa\Search\Application\Service\SearchFilterNormalizer;
+use Semitexa\Search\Application\Service\SearchTextParser;
+use Semitexa\Search\Domain\Model\SearchPlannerTrace;
+use Semitexa\Search\Domain\Model\SearchRequest;
+use Semitexa\Search\Domain\Model\SearchResult;
+use Semitexa\Tenancy\Context\TenantContext;
+
+#[SatisfiesServiceContract(of: SearchManagerInterface::class)]
+final class SearchManager implements SearchManagerInterface
+{
+    #[InjectAsReadonly]
+    protected SearchIndexRegistryInterface $registry;
+
+    #[InjectAsReadonly]
+    protected SearchBackendInterface $backend;
+
+    private ?SearchConfig $config = null;
+    private ?SearchFilterNormalizer $filterNormalizer = null;
+    private ?SearchTextParser $textParser = null;
+    private ?SearchRequestFactory $requestFactory = null;
+    private ?SearchQueryPlannerInterface $planner = null;
+
+    public function search(SearchRequest $request): SearchResult
+    {
+        $config = $this->config ??= SearchConfig::fromEnvironment();
+        $filterNormalizer = $this->filterNormalizer ??= new SearchFilterNormalizer();
+        $planner = $this->planner ??= new NoOpSearchQueryPlanner();
+        $definition = $this->registry->get($request->index);
+
+        $request = $this->enforceTenantScope($request, $definition->requiresTenantScope());
+
+        $normalizedFilters = $filterNormalizer->normalize($definition, $request->filters);
+        $request = $request->with(filters: $normalizedFilters);
+
+        if ($this->shouldUsePlanner($definition, $request, $config)) {
+            $request = $this->applyPlanner($definition, $request, $config, $planner);
+        }
+
+        if (!$this->backend->supports($definition)) {
+            throw new SearchBackendException(
+                "Backend does not support index '{$definition->name}' (backend: '{$definition->backend}')"
+            );
+        }
+
+        return $this->backend->search($definition, $request);
+    }
+
+    /**
+     * @param array<string, scalar|list<scalar>|array{from?: scalar, to?: scalar}> $filters
+     */
+    public function searchText(
+        string $index,
+        string $rawQuery,
+        int $limit = 20,
+        array $filters = [],
+    ): SearchResult {
+        $textParser = $this->textParser ??= new SearchTextParser();
+        $requestFactory = $this->requestFactory ??= new SearchRequestFactory($this->config ??= SearchConfig::fromEnvironment());
+        $definition = $this->registry->get($index);
+
+        $parsed = $textParser->parse($definition, $rawQuery);
+
+        $mergedFilters = array_merge($parsed['filters'], $filters);
+
+        $request = $requestFactory->create(
+            index: $index,
+            query: $parsed['query'],
+            filters: $mergedFilters,
+            limit: $limit,
+        );
+
+        return $this->search($request);
+    }
+
+    private function enforceTenantScope(SearchRequest $request, bool $requiresTenant): SearchRequest
+    {
+        if (!$requiresTenant) {
+            return $request;
+        }
+
+        if ($request->scope !== SearchScope::Tenant) {
+            return $request->with(scope: SearchScope::Tenant);
+        }
+
+        if ($request->tenantId !== null) {
+            return $request;
+        }
+
+        $tenantContext = TenantContext::get();
+        $tenantId = $tenantContext?->getTenantId() ?? 'default';
+
+        return $request->with(tenantId: $tenantId);
+    }
+
+    private function shouldUsePlanner(
+        \Semitexa\Search\Domain\Model\SearchIndexDefinition $definition,
+        SearchRequest $request,
+        SearchConfig $config,
+    ): bool {
+        if (!$config->plannerEnabled) {
+            return false;
+        }
+
+        if (!$definition->plannerEnabled) {
+            return false;
+        }
+
+        if ($request->query === null) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function applyPlanner(
+        \Semitexa\Search\Domain\Model\SearchIndexDefinition $definition,
+        SearchRequest $request,
+        SearchConfig $config,
+        SearchQueryPlannerInterface $planner,
+    ): SearchRequest {
+        $policy = new SearchPlannerPolicy(
+            minConfidence: $config->plannerMinConfidence,
+            timeoutMs: $config->plannerTimeoutMs,
+        );
+
+        try {
+            $result = $planner->plan($definition, $request, $policy);
+        } catch (\Throwable $e) {
+            return $request->with(
+                plannerTrace: new SearchPlannerTrace(
+                    plannerName: 'unknown',
+                    confidence: 0.0,
+                    wasUsed: false,
+                    fallbackReason: 'Planner error: ' . $e->getMessage(),
+                ),
+            );
+        }
+
+        if (!$result->isUsable($config->plannerMinConfidence)) {
+            $trace = $result->trace ?? new SearchPlannerTrace(
+                plannerName: $result->plannerName,
+                confidence: $result->confidence,
+                wasUsed: false,
+                fallbackReason: 'Below minimum confidence threshold',
+                warnings: $result->warnings,
+            );
+
+            return $request->with(plannerTrace: $trace);
+        }
+
+        $mergedFilters = array_merge($request->filters, $result->filters);
+        $sort = !empty($result->sort) ? $result->sort : $request->sort;
+
+        $trace = $result->trace ?? new SearchPlannerTrace(
+            plannerName: $result->plannerName,
+            confidence: $result->confidence,
+            wasUsed: true,
+        );
+
+        return $request->with(
+            query: $result->query,
+            filters: $mergedFilters,
+            sort: $sort,
+            plannerTrace: $trace,
+        );
+    }
+}

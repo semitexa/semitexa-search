@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Backend\Orm;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Search\Backend\Orm\OrmSearchBackend;
-use Semitexa\Search\Backend\Orm\OrmSearchQueryInterface;
-use Semitexa\Search\Backend\Orm\OrmSearchQueryFactoryInterface;
-use Semitexa\Search\Enum\SearchFieldType;
+use Semitexa\Search\Application\Service\Orm\OrmSearchBackend;
+use Semitexa\Search\Domain\Contract\OrmSearchQueryInterface;
+use Semitexa\Search\Domain\Contract\OrmSearchQueryFactoryInterface;
+use Semitexa\Search\Domain\Enum\SearchFieldType;
 use Semitexa\Search\Exception\SearchBackendException;
-use Semitexa\Search\Index\SearchFieldDefinition;
-use Semitexa\Search\Index\SearchIndexDefinition;
-use Semitexa\Search\Value\SearchRequest;
+use Semitexa\Search\Domain\Model\SearchFieldDefinition;
+use Semitexa\Search\Domain\Model\SearchIndexDefinition;
+use Semitexa\Search\Domain\Model\SearchRequest;
 
 final class OrmSearchBackendTest extends TestCase
 {
