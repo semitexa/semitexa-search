@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Value;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Search\Value\SearchHit;
-use Semitexa\Search\Value\SearchResult;
+use Semitexa\Search\Domain\Model\SearchHit;
+use Semitexa\Search\Domain\Model\SearchResult;
 
 final class SearchResultTest extends TestCase
 {

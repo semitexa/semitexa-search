@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Index;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Search\Enum\SearchFieldType;
-use Semitexa\Search\Enum\SearchMatchStrategy;
-use Semitexa\Search\Enum\SearchScope;
-use Semitexa\Search\Index\SearchFieldDefinition;
-use Semitexa\Search\Index\SearchIndexDefinition;
+use Semitexa\Search\Domain\Enum\SearchFieldType;
+use Semitexa\Search\Domain\Enum\SearchMatchStrategy;
+use Semitexa\Search\Domain\Enum\SearchScope;
+use Semitexa\Search\Domain\Model\SearchFieldDefinition;
+use Semitexa\Search\Domain\Model\SearchIndexDefinition;
 
 final class SearchIndexDefinitionTest extends TestCase
 {

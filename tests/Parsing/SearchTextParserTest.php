@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Parsing;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Search\Enum\SearchFieldType;
-use Semitexa\Search\Index\SearchFieldDefinition;
-use Semitexa\Search\Index\SearchIndexDefinition;
-use Semitexa\Search\Parsing\SearchTextParser;
+use Semitexa\Search\Domain\Enum\SearchFieldType;
+use Semitexa\Search\Domain\Model\SearchFieldDefinition;
+use Semitexa\Search\Domain\Model\SearchIndexDefinition;
+use Semitexa\Search\Application\Service\SearchTextParser;
 
 final class SearchTextParserTest extends TestCase
 {

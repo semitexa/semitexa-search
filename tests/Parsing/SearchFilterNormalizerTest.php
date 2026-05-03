@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Semitexa\Search\Tests\Parsing;
 
 use PHPUnit\Framework\TestCase;
-use Semitexa\Search\Enum\SearchFieldType;
+use Semitexa\Search\Domain\Enum\SearchFieldType;
 use Semitexa\Search\Exception\SearchValidationException;
-use Semitexa\Search\Index\SearchFieldDefinition;
-use Semitexa\Search\Index\SearchIndexDefinition;
-use Semitexa\Search\Parsing\SearchFilterNormalizer;
+use Semitexa\Search\Domain\Model\SearchFieldDefinition;
+use Semitexa\Search\Domain\Model\SearchIndexDefinition;
+use Semitexa\Search\Application\Service\SearchFilterNormalizer;
 
 final class SearchFilterNormalizerTest extends TestCase
 {
