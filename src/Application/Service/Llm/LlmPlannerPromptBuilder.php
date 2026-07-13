@@ -7,7 +7,7 @@ namespace Semitexa\Search\Application\Service\Llm;
 use Semitexa\Prompt\Application\Service\PromptRegistry;
 use Semitexa\Prompt\Application\Service\PromptRenderer;
 use Semitexa\Prompt\Domain\Model\PromptTemplate;
-use Semitexa\Search\Application\Service\Prompt\SearchPlannerPrompt;
+use Semitexa\Search\Application\Prompt\SearchPlannerPrompt;
 use Semitexa\Search\Domain\Model\SearchPlannerPolicy;
 use Semitexa\Search\Domain\Model\SearchIndexDefinition;
 

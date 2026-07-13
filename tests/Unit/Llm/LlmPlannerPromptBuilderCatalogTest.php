@@ -7,7 +7,7 @@ namespace Semitexa\Search\Tests\Unit\Llm;
 use PHPUnit\Framework\TestCase;
 use Semitexa\Prompt\Application\Service\PromptRegistry;
 use Semitexa\Search\Application\Service\Llm\LlmPlannerPromptBuilder;
-use Semitexa\Search\Application\Service\Prompt\SearchPlannerPrompt;
+use Semitexa\Search\Application\Prompt\SearchPlannerPrompt;
 use Semitexa\Search\Domain\Enum\SearchFieldType;
 use Semitexa\Search\Domain\Model\SearchFieldDefinition;
 use Semitexa\Search\Domain\Model\SearchIndexDefinition;
