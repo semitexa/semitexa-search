@@ -41,6 +41,6 @@ final class LlmPlannerPromptBuilderCatalogTest extends TestCase
         $vars = $template->variableNames();
         sort($vars);
 
-        self::assertSame(['document_type', 'fields', 'index_name', 'operators', 'user_query'], $vars);
+        self::assertSame(['documentType', 'fields', 'indexName', 'operators', 'userQuery'], $vars);
     }
 }
