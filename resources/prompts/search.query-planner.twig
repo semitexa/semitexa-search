@@ -4,7 +4,8 @@ Target index: {{ index_name }}
 Document type: {{ document_type }}
 
 Available fields:
-{{ fields }}
+{% for f in fields %}- {{ f.name }} (type: {{ f.type }}, roles: {{ [f.searchable ? 'searchable' : null, f.filterable ? 'filterable' : null, f.sortable ? 'sortable' : null]|filter(v => v)|join(', ') }})
+{% endfor %}
 
 Allowed operators: {{ operators }}
 

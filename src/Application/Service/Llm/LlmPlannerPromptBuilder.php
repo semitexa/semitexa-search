@@ -28,32 +28,17 @@ final class LlmPlannerPromptBuilder
         return $this->renderer->renderTemplate($this->template, [
             'index_name' => $definition->name,
             'document_type' => $definition->documentType,
-            'fields' => $this->buildFieldManifest($definition),
+            // Raw field data — the template's {% for %} loop formats the manifest.
+            'fields' => array_map(static fn($f): array => [
+                'name' => $f->name,
+                'type' => $f->type->value,
+                'searchable' => $f->searchable,
+                'filterable' => $f->filterable,
+                'sortable' => $f->sortable,
+            ], $definition->fields),
             'operators' => implode(', ', $policy->allowedOperators),
             'user_query' => $userQuery,
         ])->system;
     }
 
-    private function buildFieldManifest(SearchIndexDefinition $definition): string
-    {
-        $lines = [];
-
-        foreach ($definition->fields as $field) {
-            $roles = [];
-            if ($field->searchable) {
-                $roles[] = 'searchable';
-            }
-            if ($field->filterable) {
-                $roles[] = 'filterable';
-            }
-            if ($field->sortable) {
-                $roles[] = 'sortable';
-            }
-
-            $rolesStr = implode(', ', $roles);
-            $lines[] = "- {$field->name} (type: {$field->type->value}, roles: {$rolesStr})";
-        }
-
-        return implode("\n", $lines);
-    }
 }
