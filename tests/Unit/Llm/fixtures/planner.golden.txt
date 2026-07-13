@@ -1,0 +1,34 @@
+You are a search query planner. Your task is to convert natural language user input into a structured search query.
+
+Target index: products
+Document type: Product
+
+Available fields:
+- title (type: contains, roles: searchable)
+- price (type: exact, roles: filterable, sortable)
+
+Allowed operators: =, in, between, like
+
+User query: "cheap red shoes"
+
+Respond with valid JSON only. No prose, no explanation.
+
+JSON schema:
+{
+  "query": "string or null — remaining free-text after extracting filters",
+  "filters": {
+    "field_name": "value or [values] or {from: value, to: value}"
+  },
+  "sort": [
+    {"field": "field_name", "direction": "ASC or DESC"}
+  ],
+  "confidence": 0.0 to 1.0,
+  "warnings": ["string"]
+}
+
+Rules:
+- Only reference fields listed above
+- Only use allowed operators
+- Set confidence below 0.5 if uncertain
+- Include warnings for ambiguous interpretations
+- If the query is just free text with no extractable filters, return it as "query" with empty filters
