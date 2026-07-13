@@ -12,6 +12,7 @@ use Semitexa\Prompt\Attribute\AsPrompt;
 #[AsPrompt(
     id: self::ID,
     channel: 'search',
+    template: 'search.query-planner.twig',
     description: 'LLM search-query planner: natural language to a structured JSON query.',
 )]
 final class SearchPlannerPrompt
