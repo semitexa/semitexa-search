@@ -20,6 +20,9 @@ final class SearchPlannerPrompt implements BoundPromptInterface
 {
     public const ID = 'search.query-planner';
 
+    /**
+     * @param list<array{name: string, type: string, searchable: bool, filterable: bool, sortable: bool}> $fields
+     */
     public function __construct(
         private readonly ?string $indexName = null,
         private readonly ?string $documentType = null,
@@ -28,6 +31,9 @@ final class SearchPlannerPrompt implements BoundPromptInterface
         private readonly ?string $userQuery = null,
     ) {}
 
+    /**
+     * @param list<array{name: string, type: string, searchable: bool, filterable: bool, sortable: bool}> $fields
+     */
     public function withData(string $indexName, string $documentType, array $fields, string $operators, string $userQuery): self
     {
         return new self($indexName, $documentType, $fields, $operators, $userQuery);
@@ -48,7 +54,7 @@ final class SearchPlannerPrompt implements BoundPromptInterface
         return (string) $this->documentType;
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<array{name: string, type: string, searchable: bool, filterable: bool, sortable: bool}> */
     public function fields(): array
     {
         return $this->fields;

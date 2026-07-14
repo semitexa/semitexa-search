@@ -30,7 +30,9 @@ final class LlmPlannerPromptBuilderCatalogTest extends TestCase
 
         $prompt = (new LlmPlannerPromptBuilder())->build($definition, 'cheap red shoes', new SearchPlannerPolicy());
 
-        $golden = (string) file_get_contents(__DIR__ . '/fixtures/planner.golden.txt');
+        $goldenPath = __DIR__ . '/fixtures/planner.golden.txt';
+        $golden = file_get_contents($goldenPath);
+        self::assertNotFalse($golden, "Missing golden fixture: {$goldenPath}");
         self::assertSame($golden, $prompt);
     }
 
