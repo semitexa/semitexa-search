@@ -13,7 +13,8 @@
         "php": "^8.4",
         "semitexa/core": "*",
         "semitexa/orm": "*",
-        "semitexa/tenancy": "*"
+        "semitexa/tenancy": "*",
+        "semitexa/prompt": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.0"
