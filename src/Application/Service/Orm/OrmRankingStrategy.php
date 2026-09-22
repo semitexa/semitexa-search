@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Application\Service\Orm;
 
-use Semitexa\Search\Domain\Enum\SearchMatchStrategy;
 use Semitexa\Search\Domain\Model\SearchFieldDefinition;
 use Semitexa\Search\Domain\Model\SearchIndexDefinition;
 use Semitexa\Search\Domain\Model\SearchHit;
