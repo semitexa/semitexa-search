@@ -122,7 +122,10 @@ final class OrmSearchTranslator
 
     private function buildLikePattern(SearchMatchStrategy $strategy, string $query): string
     {
-        $escaped = str_replace(['%', '_'], ['\\%', '\\_'], $query);
+        // The backslash first: it is the LIKE escape character, so a literal
+        // one in the query must be doubled before \% and \_ are introduced,
+        // or `50\%` turns the user's own % back into a wildcard.
+        $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
 
         return match ($strategy) {
             SearchMatchStrategy::Exact => $escaped,
