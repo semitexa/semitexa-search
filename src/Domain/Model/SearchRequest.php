@@ -40,6 +40,22 @@ final readonly class SearchRequest
         }
     }
 
+    /** The same request with $query as its text, null included (with() keeps the old one for null). */
+    public function withQuery(?string $query): self
+    {
+        return new self(
+            index: $this->index,
+            query: $query,
+            filters: $this->filters,
+            sort: $this->sort,
+            limit: $this->limit,
+            offset: $this->offset,
+            scope: $this->scope,
+            tenantId: $this->tenantId,
+            plannerTrace: $this->plannerTrace,
+        );
+    }
+
     /**
      * @param array<string, scalar|list<scalar>|array{from?: scalar, to?: scalar}> $filters
      * @param list<SortClause> $sort

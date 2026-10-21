@@ -34,13 +34,16 @@ final class SearchManager implements SearchManagerInterface
     private ?SearchFilterNormalizer $filterNormalizer = null;
     private ?SearchTextParser $textParser = null;
     private ?SearchRequestFactory $requestFactory = null;
-    private ?SearchQueryPlannerInterface $planner = null;
+    // Injected (the LLM planner): it was always the no-op, so the planner
+    // the README promises never ran.
+    #[InjectAsReadonly]
+    protected SearchQueryPlannerInterface $planner;
 
     public function search(SearchRequest $request): SearchResult
     {
         $config = $this->config ??= SearchConfig::fromEnvironment();
         $filterNormalizer = $this->filterNormalizer ??= new SearchFilterNormalizer();
-        $planner = $this->planner ??= new NoOpSearchQueryPlanner();
+        $planner = isset($this->planner) ? $this->planner : new NoOpSearchQueryPlanner();
         $definition = $this->registry->get($request->index);
 
         $request = $this->enforceTenantScope($request, $definition->requiresTenantScope());
@@ -167,8 +170,11 @@ final class SearchManager implements SearchManagerInterface
             return $request->with(plannerTrace: $trace);
         }
 
-        $mergedFilters = array_merge($request->filters, $result->filters);
-        $sort = !empty($result->sort) ? $result->sort : $request->sort;
+        // The request's own filters win: the app's `status: published` was
+        // replaced by a model that read "show drafts" in the query.
+        $mergedFilters = array_merge($result->filters, $request->filters);
+        // The request's own sort wins too, as its filters do.
+        $sort = $request->sort !== [] ? $request->sort : $result->sort;
 
         $trace = $result->trace ?? new SearchPlannerTrace(
             plannerName: $result->plannerName,
@@ -176,11 +182,17 @@ final class SearchManager implements SearchManagerInterface
             wasUsed: true,
         );
 
+        // A null query from the plan means "filters only": with() would have
+        // kept the natural-language text and matched nothing. Unless the plan
+        // adds no filter of its own: then the text is all there is, and
+        // dropping it listed everything.
+        $addsFilters = array_diff_key($result->filters, $request->filters) !== [];
+        $query = $result->query ?? ($addsFilters ? null : $request->query);
+
         return $request->with(
-            query: $result->query,
             filters: $mergedFilters,
             sort: $sort,
             plannerTrace: $trace,
-        );
+        )->withQuery($query);
     }
 }
