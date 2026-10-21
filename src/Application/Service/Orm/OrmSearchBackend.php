@@ -46,7 +46,9 @@ final class OrmSearchBackend implements SearchBackendInterface
 
             $hits = $this->mapHits($definition, $rows, $request->query, $rankingStrategy);
 
-            if ($request->query !== null) {
+            // Relevance orders the page only when the caller asked for no order:
+            // an explicit sort was re-sorted away whenever there was a query.
+            if ($request->query !== null && $request->sort === []) {
                 $hits = $rankingStrategy->sortByRelevance($hits);
             }
 

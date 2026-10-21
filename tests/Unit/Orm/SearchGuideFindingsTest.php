@@ -70,6 +70,36 @@ final class SearchGuideFindingsTest extends TestCase
         (new SearchFilterNormalizer())->normalize($this->definition(), ['price' => ['1', 'abc']]);
     }
 
+    #[Test]
+    public function an_explicit_sort_is_not_re_sorted_by_relevance(): void
+    {
+        // Sorted by price, a query re-sorted the page by relevance anyway.
+        $query = new RecordingSearchQuery();
+        $query->rows = [
+            (object) ['id' => 'cheap', 'title' => 'desk', 'sku' => 'd1', 'price' => 5],
+            (object) ['id' => 'dear', 'title' => 'lamp', 'sku' => 'lamp-1', 'price' => 90],
+        ];
+        $backend = new \Semitexa\Search\Application\Service\Orm\OrmSearchBackend();
+        (new \ReflectionProperty($backend, 'queryFactory'))->setValue($backend, new class ($query) implements \Semitexa\Search\Domain\Contract\OrmSearchQueryFactoryInterface {
+            public function __construct(private RecordingSearchQuery $query) {}
+            public function createQuery(SearchIndexDefinition $definition): OrmSearchQueryInterface { return $this->query; }
+        });
+        $definition = new SearchIndexDefinition(
+            name: 'products', documentType: 'product',
+            fields: [
+                new SearchFieldDefinition(name: 'title', type: SearchFieldType::Contains, searchable: true),
+                new SearchFieldDefinition(name: 'sku', type: SearchFieldType::Contains, searchable: true),
+                new SearchFieldDefinition(name: 'price', type: SearchFieldType::Number, sortable: true),
+            ],
+        );
+
+        $sorted = $backend->search($definition, new SearchRequest(index: 'products', query: 'lamp', sort: [new \Semitexa\Search\Domain\Model\SortClause('price', 'ASC')], tenantId: 'acme'));
+        $ranked = $backend->search($definition, new SearchRequest(index: 'products', query: 'lamp', tenantId: 'acme'));
+
+        self::assertSame(['cheap', 'dear'], array_map(static fn ($h) => $h->documentId, $sorted->hits));
+        self::assertSame('dear', $ranked->hits[0]->documentId, 'without a sort, relevance still orders the page');
+    }
+
     private function definition(): SearchIndexDefinition
     {
         return new SearchIndexDefinition(
@@ -93,6 +123,8 @@ final class RecordingSearchQuery implements OrmSearchQueryInterface
     public array $orWheres = [];
     /** @var list<array<string, string>> */
     public array $anyLike = [];
+    /** @var list<object> */
+    public array $rows = [];
 
     public function where(string $column, string $operator, mixed $value): static { $this->wheres[] = [$column, $operator, $value]; return $this; }
     public function orWhere(string $column, string $operator, mixed $value): static { $this->orWheres[] = [$column, $operator, $value]; return $this; }
@@ -102,6 +134,6 @@ final class RecordingSearchQuery implements OrmSearchQueryInterface
     public function orderBy(string $column, string $direction = 'ASC'): static { return $this; }
     public function limit(int $limit): static { return $this; }
     public function offset(int $offset): static { return $this; }
-    public function fetchAll(): array { return []; }
-    public function count(): int { return 0; }
+    public function fetchAll(): array { return $this->rows; }
+    public function count(): int { return count($this->rows); }
 }
