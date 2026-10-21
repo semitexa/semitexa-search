@@ -94,8 +94,11 @@ final class SearchManager implements SearchManagerInterface
             return $request;
         }
 
+        // Reset to the tenant scope AND filled in below: returning here left the
+        // tenant id empty, the translator added no tenant condition, and a
+        // Global request on a tenant index searched every tenant.
         if ($request->scope !== SearchScope::Tenant) {
-            return $request->with(scope: SearchScope::Tenant);
+            $request = $request->with(scope: SearchScope::Tenant);
         }
 
         if ($request->tenantId !== null) {

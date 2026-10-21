@@ -11,6 +11,15 @@ interface OrmSearchQueryInterface
     public function orWhere(string $column, string $operator, mixed $value): static;
 
     /**
+     * One group, AND-ed with the conditions before it: `(a LIKE :pa OR b LIKE :pb …)`.
+     * The text match is this group; as loose orWhere() calls it ended up
+     * OR-ed beside the tenant and filter conditions.
+     *
+     * @param non-empty-array<string, string> $patternByColumn column => LIKE pattern
+     */
+    public function whereAnyLike(array $patternByColumn): static;
+
+    /**
      * @param array<int, scalar|null> $values
      */
     public function whereIn(string $column, array $values): static;

@@ -132,6 +132,10 @@ final class SearchFilterNormalizer
                 $violations[] = "List filter value for '{$field->name}' contains a non-scalar element";
                 return null;
             }
+            if ($field->type === SearchFieldType::Number && !is_numeric($item)) {
+                $violations[] = "List filter value for '{$field->name}' must be numeric";
+                return null;
+            }
             $normalized[] = $item;
         }
 
@@ -148,14 +152,14 @@ final class SearchFilterNormalizer
         mixed $value,
         array &$violations,
     ): mixed {
-        return match ($field->type) {
-            SearchFieldType::Number => is_numeric($value)
-                ? $value
-                : (function () use ($field, $violations, &$value) {
-                    $violations[] = "Filter value for '{$field->name}' must be numeric";
-                    return null;
-                })(),
-            default => $value,
-        };
+        // The closure that recorded this captured $violations by value, so
+        // `price:abc` was dropped silently instead of refused.
+        if ($field->type === SearchFieldType::Number && !is_numeric($value)) {
+            $violations[] = "Filter value for '{$field->name}' must be numeric";
+
+            return null;
+        }
+
+        return $value;
     }
 }
