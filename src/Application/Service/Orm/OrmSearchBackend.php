@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Application\Service\Orm;
 
+use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Search\Domain\Contract\SearchBackendInterface;
 use Semitexa\Search\Domain\Contract\OrmSearchQueryFactoryInterface;
@@ -16,13 +17,16 @@ use Semitexa\Search\Domain\Model\SearchResult;
 #[SatisfiesServiceContract(of: SearchBackendInterface::class)]
 final class OrmSearchBackend implements SearchBackendInterface
 {
-    protected ?OrmSearchQueryFactoryInterface $queryFactory = null;
+    // Injected: it carried no attribute, so the backend never had a factory
+    // and reported every index as unsupported.
+    #[InjectAsReadonly]
+    protected OrmSearchQueryFactoryInterface $queryFactory;
     private ?OrmSearchTranslator $translator = null;
     private ?OrmRankingStrategy $rankingStrategy = null;
 
     public function supports(SearchIndexDefinition $definition): bool
     {
-        return $definition->backend === 'orm' && $this->queryFactory !== null;
+        return $definition->backend === 'orm' && isset($this->queryFactory);
     }
 
     public function search(SearchIndexDefinition $definition, SearchRequest $request): SearchResult
@@ -32,7 +36,7 @@ final class OrmSearchBackend implements SearchBackendInterface
         $startTime = hrtime(true);
 
         try {
-            if ($this->queryFactory === null) {
+            if (!isset($this->queryFactory)) {
                 throw new SearchBackendException(
                     "ORM backend is not available for index '{$definition->name}' because no query factory is configured.",
                 );
