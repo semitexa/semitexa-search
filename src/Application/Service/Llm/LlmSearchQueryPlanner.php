@@ -36,7 +36,37 @@ final class LlmSearchQueryPlanner implements SearchQueryPlannerInterface
     private ?LlmPlannerPromptBuilder $promptBuilder = null;
     private ?LlmPlannerSchemaValidator $validator = null;
 
+    private const CACHE_SECONDS = 600;
+    private const CACHE_ENTRIES = 256;
+
+    /**
+     * Answers this worker already paid for: the same query on the same index
+     * asked again (a reload, a next page) made the same model call again.
+     *
+     * @var array<string, array{at: int, result: SearchPlanningResult}>
+     */
+    private array $answered = [];
+
     public function plan(SearchIndexDefinition $definition, SearchRequest $request, SearchPlannerPolicy $policy): SearchPlanningResult
+    {
+        $key = sha1($definition->name . "\0" . mb_strtolower(trim((string) $request->query)) . "\0" . serialize($policy));
+        $cached = $this->answered[$key] ?? null;
+        if ($cached !== null && time() - $cached['at'] < self::CACHE_SECONDS) {
+            return $cached['result'];
+        }
+        $result = $this->planAnew($definition, $request, $policy);
+        // A model that could not be reached is asked again next time.
+        if ($result->trace?->fallbackReason === null || !str_starts_with($result->trace->fallbackReason, 'Planner failed')) {
+            if (count($this->answered) >= self::CACHE_ENTRIES) {
+                array_shift($this->answered);
+            }
+            $this->answered[$key] = ['at' => time(), 'result' => $result];
+        }
+
+        return $result;
+    }
+
+    private function planAnew(SearchIndexDefinition $definition, SearchRequest $request, SearchPlannerPolicy $policy): SearchPlanningResult
     {
         $started = hrtime(true);
         $query = (string) $request->query;

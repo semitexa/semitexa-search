@@ -14,6 +14,7 @@ use Semitexa\Search\Domain\Model\SearchPlannerPolicy;
 use Semitexa\Search\Domain\Contract\SearchQueryPlannerInterface;
 use Semitexa\Search\Domain\Enum\SearchScope;
 use Semitexa\Search\Exception\SearchBackendException;
+use Semitexa\Search\Exception\SearchValidationException;
 use Semitexa\Search\Application\Service\SearchFilterNormalizer;
 use Semitexa\Search\Application\Service\SearchTextParser;
 use Semitexa\Search\Domain\Model\SearchPlannerTrace;
@@ -45,6 +46,7 @@ final class SearchManager implements SearchManagerInterface
         $filterNormalizer = $this->filterNormalizer ??= new SearchFilterNormalizer();
         $planner = isset($this->planner) ? $this->planner : new NoOpSearchQueryPlanner();
         $definition = $this->registry->get($request->index);
+        self::assertWithinLimits($request, $config);
 
         $request = $this->enforceTenantScope($request, $definition->requiresTenantScope());
 
@@ -91,6 +93,42 @@ final class SearchManager implements SearchManagerInterface
         return $this->search($request);
     }
 
+    /** Deeper than this, an offset scans more rows than any page of results is worth. */
+    private const MAX_OFFSET = 10_000;
+
+    /** Values one filter may list (`whereIn`). */
+    private const MAX_FILTER_VALUES = 1_000;
+
+    /**
+     * The limits SearchRequestFactory checks, here as well: a request built
+     * by hand and passed to search() was taken with `limit: 1000000`, any
+     * offset and any length of query or value list.
+     */
+    private static function assertWithinLimits(SearchRequest $request, SearchConfig $config): void
+    {
+        $violations = [];
+        if ($request->query !== null && mb_strlen($request->query) > $config->maxQueryLength) {
+            $violations[] = "Query exceeds maximum length of {$config->maxQueryLength} characters";
+        }
+        if (count($request->filters) > $config->maxFilterCount) {
+            $violations[] = "Filter count exceeds maximum of {$config->maxFilterCount}";
+        }
+        foreach ($request->filters as $field => $value) {
+            if (is_array($value) && array_is_list($value) && count($value) > self::MAX_FILTER_VALUES) {
+                $violations[] = "Filter '{$field}' lists more than " . self::MAX_FILTER_VALUES . ' values';
+            }
+        }
+        if ($request->limit > $config->maxResultLimit) {
+            $violations[] = "Limit exceeds maximum of {$config->maxResultLimit}";
+        }
+        if ($request->offset > self::MAX_OFFSET) {
+            $violations[] = 'Offset exceeds maximum of ' . self::MAX_OFFSET;
+        }
+        if ($violations !== []) {
+            throw SearchValidationException::fromViolations($violations);
+        }
+    }
+
     private function enforceTenantScope(SearchRequest $request, bool $requiresTenant): SearchRequest
     {
         if (!$requiresTenant) {
@@ -131,7 +169,11 @@ final class SearchManager implements SearchManagerInterface
             return false;
         }
 
-        return true;
+        // A model call (up to 3 s, paid) for every search: a single word has
+        // no filter or sort in it to find, and a public box made each one a call.
+        $words = preg_split('/\s+/u', trim($request->query), -1, PREG_SPLIT_NO_EMPTY);
+
+        return is_array($words) && count($words) >= 2;
     }
 
     private function applyPlanner(

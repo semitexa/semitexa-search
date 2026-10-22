@@ -52,16 +52,16 @@ final class SearchManagerPlannerTest extends TestCase
     {
         // It dropped the text and added nothing: the search listed everything.
         $this->manager(new SearchPlanningResult(query: null, filters: ['status' => 'draft'], confidence: 0.9))
-            ->search(new SearchRequest(index: 'posts', query: 'lamp', filters: ['status' => 'published'], scope: SearchScope::Global));
+            ->search(new SearchRequest(index: 'posts', query: 'floor lamp', filters: ['status' => 'published'], scope: SearchScope::Global));
 
-        self::assertSame('lamp', $this->searched?->query);
+        self::assertSame('floor lamp', $this->searched?->query);
     }
 
     #[Test]
     public function the_apps_own_sort_wins_over_the_plans(): void
     {
         $this->manager(new SearchPlanningResult(query: 'post', sort: [new \Semitexa\Search\Domain\Model\SortClause('title', 'DESC')], confidence: 0.9))
-            ->search(new SearchRequest(index: 'posts', query: 'x', sort: [new \Semitexa\Search\Domain\Model\SortClause('title', 'ASC')], scope: SearchScope::Global));
+            ->search(new SearchRequest(index: 'posts', query: 'newest posts', sort: [new \Semitexa\Search\Domain\Model\SortClause('title', 'ASC')], scope: SearchScope::Global));
 
         self::assertSame('ASC', $this->searched?->sort[0]->direction);
     }
@@ -72,6 +72,33 @@ final class SearchManagerPlannerTest extends TestCase
         $this->manager(null, plannerOn: false)->search(new SearchRequest(index: 'posts', query: 'anything', scope: SearchScope::Global));
 
         self::assertSame('anything', $this->searched?->query);
+    }
+
+    /** A model call for every search: a single word has no filter or sort in it to find. */
+    #[Test]
+    public function a_single_word_is_searched_without_asking_the_planner(): void
+    {
+        $this->manager(null)->search(new SearchRequest(index: 'posts', query: 'lamp', scope: SearchScope::Global));
+
+        self::assertSame('lamp', $this->searched?->query);
+        // A planner asked would have thrown, and its failure is a trace.
+        self::assertNull($this->searched?->plannerTrace, 'the planner was not asked');
+    }
+
+    /** A request built by hand reached the backend with `limit: 1000000` and any offset. */
+    #[Test]
+    public function a_request_past_the_search_limits_is_refused_however_it_was_built(): void
+    {
+        $manager = $this->manager(null, plannerOn: false);
+
+        foreach ([['limit' => 1_000_000], ['offset' => 50_000], ['filters' => ['status' => array_map('strval', range(1, 1001))]]] as $past) {
+            try {
+                $manager->search(new SearchRequest(...['index' => 'posts', 'scope' => SearchScope::Global, ...$past]));
+                self::fail('accepted: ' . json_encode(array_keys($past)));
+            } catch (\Semitexa\Search\Exception\SearchValidationException) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 
     private function manager(?SearchPlanningResult $plan, bool $plannerOn = true): SearchManager
