@@ -8,6 +8,7 @@ use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Psr\Container\ContainerInterface;
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Search\Domain\Contract\LlmPlannerBridgeInterface;
+use Semitexa\Search\Domain\Contract\LlmPlannerMessageBridgeInterface;
 
 /**
  * The planner's way to a model: semitexa/llm's LlmProviderResolver, which
@@ -18,7 +19,7 @@ use Semitexa\Search\Domain\Contract\LlmPlannerBridgeInterface;
  * allows it: a full-size call per search took up to minutes and paid for it.
  */
 #[SatisfiesServiceContract(of: LlmPlannerBridgeInterface::class)]
-final class LlmProviderPlannerBridge implements LlmPlannerBridgeInterface
+final class LlmProviderPlannerBridge implements LlmPlannerMessageBridgeInterface
 {
     private const RESOLVER = 'Semitexa\\Llm\\Application\\Service\\LlmProviderResolver';
     private const REQUEST = 'Semitexa\\Llm\\Domain\\Model\\LlmRequest';
@@ -27,6 +28,11 @@ final class LlmProviderPlannerBridge implements LlmPlannerBridgeInterface
     protected ContainerInterface $container;
 
     public function execute(string $prompt, int $timeoutMs): string
+    {
+        return $this->executeMessage($prompt, 'Plan the search. Answer with the JSON object only.', $timeoutMs);
+    }
+
+    public function executeMessage(string $systemPrompt, string $userMessage, int $timeoutMs): string
     {
         if (!class_exists(self::RESOLVER) || !class_exists(self::REQUEST)) {
             throw new \RuntimeException('semitexa/llm is not installed: the search planner has no model to ask.');
@@ -42,8 +48,8 @@ final class LlmProviderPlannerBridge implements LlmPlannerBridgeInterface
         }
         $provider = $provider->withLimits(max(1, (int) ceil($timeoutMs / 1000)), 0, maxTokens: 512, thinking: false);
         $response = $provider->complete(new $request(
-            systemPrompt: $prompt,
-            userMessage: 'Plan the search. Answer with the JSON object only.',
+            systemPrompt: $systemPrompt,
+            userMessage: $userMessage,
         ));
         if (!$response->success) {
             throw new \RuntimeException('The model call failed: ' . ($response->error ?? 'no reason given'));

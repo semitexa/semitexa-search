@@ -10,6 +10,7 @@ use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Search\Application\Service\SearchFilterNormalizer;
 use Semitexa\Search\Exception\SearchValidationException;
 use Semitexa\Search\Domain\Contract\LlmPlannerBridgeInterface;
+use Semitexa\Search\Domain\Contract\LlmPlannerMessageBridgeInterface;
 use Semitexa\Search\Domain\Contract\SearchQueryPlannerInterface;
 use Semitexa\Search\Domain\Model\SearchIndexDefinition;
 use Semitexa\Search\Domain\Model\SearchPlannerPolicy;
@@ -70,9 +71,19 @@ final class LlmSearchQueryPlanner implements SearchQueryPlannerInterface
     {
         $started = hrtime(true);
         $query = (string) $request->query;
+        // An empty user message is refused by the providers, and a failed
+        // plan is not remembered: every such search paid for a call.
+        if (trim($query) === '') {
+            return $this->fallback($query, 'No query to plan', $started);
+        }
         try {
-            $prompt = ($this->promptBuilder ??= new LlmPlannerPromptBuilder())->build($definition, $query, $policy);
-            $raw = $this->bridge->execute($prompt, $policy->timeoutMs);
+            $builder = $this->promptBuilder ??= new LlmPlannerPromptBuilder();
+            // The query as the user message: in the system prompt it read to
+            // the model as an instruction. A bridge of a project's own that
+            // only knows execute() still gets it the old way.
+            $raw = $this->bridge instanceof LlmPlannerMessageBridgeInterface
+                ? $this->bridge->executeMessage($builder->build($definition, null, $policy), $query, $policy->timeoutMs)
+                : $this->bridge->execute($builder->build($definition, $query, $policy), $policy->timeoutMs);
             $parsed = json_decode(self::jsonPart($raw), true, 32, JSON_THROW_ON_ERROR);
             if (!is_array($parsed)) {
                 throw new \UnexpectedValueException('the model did not answer with a JSON object');
