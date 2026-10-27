@@ -204,6 +204,7 @@ final class SearchManager implements SearchManagerInterface
         $policy = new SearchPlannerPolicy(
             minConfidence: $config->plannerMinConfidence,
             timeoutMs: $config->plannerTimeoutMs,
+            perClientPerMinute: $config->plannerRateLimit,
         );
 
         try {

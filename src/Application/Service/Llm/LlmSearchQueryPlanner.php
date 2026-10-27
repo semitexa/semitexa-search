@@ -6,7 +6,10 @@ namespace Semitexa\Search\Application\Service\Llm;
 
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
+use Psr\Container\ContainerInterface;
 use Semitexa\Core\Log\StaticLoggerBridge;
+use Semitexa\Core\RateLimit\RateLimiter;
+use Semitexa\Core\RateLimit\RateLimitKey;
 use Semitexa\Search\Application\Service\SearchFilterNormalizer;
 use Semitexa\Search\Exception\SearchValidationException;
 use Semitexa\Search\Domain\Contract\LlmPlannerBridgeInterface;
@@ -34,6 +37,11 @@ final class LlmSearchQueryPlanner implements SearchQueryPlannerInterface
     #[InjectAsReadonly]
     protected LlmPlannerBridgeInterface $bridge;
 
+    // The per-execution RateLimiter is taken from it per call: this planner
+    // lives as long as the worker.
+    #[InjectAsReadonly]
+    protected ContainerInterface $container;
+
     private ?LlmPlannerPromptBuilder $promptBuilder = null;
     private ?LlmPlannerSchemaValidator $validator = null;
 
@@ -55,7 +63,27 @@ final class LlmSearchQueryPlanner implements SearchQueryPlannerInterface
         if ($cached !== null && time() - $cached['at'] < self::CACHE_SECONDS) {
             return $cached['result'];
         }
+        // After the cache: an answer already paid for costs nothing. Refused,
+        // the query is searched as typed, and not remembered for the others.
+        $limiter = $decision = null;
+        if ($policy->perClientPerMinute > 0 && isset($this->container)) {
+            try {
+                $limiter = $this->container->get(RateLimiter::class);
+            } catch (\Throwable) {
+                // No request (a command, a job): no client to count, and the
+                // planner kept working there before the limit.
+            }
+            $decision = $limiter?->attempt('search-planner', $policy->perClientPerMinute, 60, RateLimitKey::User);
+            if ($decision !== null && !$decision->allowed) {
+                return $this->limited($request, $decision->retryAfter);
+            }
+        }
         $result = $this->planAnew($definition, $request, $policy);
+        // A call that reached no model (none installed, a provider error) is
+        // not counted: after 20 the trace said "rate limit" and hid why.
+        if ($decision !== null && str_starts_with((string) $result->trace?->fallbackReason, 'Planner failed')) {
+            $limiter?->release($decision);
+        }
         // A model that could not be reached is asked again next time.
         if ($result->trace?->fallbackReason === null || !str_starts_with($result->trace->fallbackReason, 'Planner failed')) {
             if (count($this->answered) >= self::CACHE_ENTRIES) {
@@ -128,6 +156,20 @@ final class LlmSearchQueryPlanner implements SearchQueryPlannerInterface
                 wasUsed: true,
                 latencyMs: (hrtime(true) - $started) / 1_000_000,
             ),
+        );
+    }
+
+    /** Not logged: a client hammering the search would flood the log. */
+    private function limited(SearchRequest $request, int $retryAfter): SearchPlanningResult
+    {
+        $reason = "Planner rate limit for this client: retry in {$retryAfter} s";
+
+        return new SearchPlanningResult(
+            query: (string) $request->query,
+            confidence: 0.0,
+            warnings: [$reason],
+            plannerName: 'llm',
+            trace: new SearchPlannerTrace(plannerName: 'llm', confidence: 0.0, wasUsed: false, fallbackReason: $reason),
         );
     }
 

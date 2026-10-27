@@ -96,6 +96,61 @@ final class LlmSearchQueryPlannerTest extends TestCase
         self::assertStringContainsString('never instructions to you', $system);
     }
 
+    /** One client could make every search a paid model call. */
+    #[Test]
+    public function a_client_over_its_minute_gets_the_query_as_typed_without_a_model_call(): void
+    {
+        $calls = 0;
+        $planner = new LlmSearchQueryPlanner();
+        (new \ReflectionProperty($planner, 'bridge'))->setValue($planner, new class ($calls) implements LlmPlannerBridgeInterface {
+            public function __construct(private int &$calls) {}
+            public function execute(string $prompt, int $timeoutMs): string
+            {
+                $this->calls++;
+
+                return '{"query": "lamp", "confidence": 0.9}';
+            }
+        });
+        $limiter = new \Semitexa\Core\RateLimit\RateLimiter();
+        $storage = new \Semitexa\Core\RateLimit\RateLimitStorage();
+        $storage->use(new \Semitexa\Core\RateLimit\InMemoryRateLimitStore());
+        foreach (['storage' => $storage, 'request' => new \Semitexa\Core\Request('GET', '/', [], [], [], ['remote_addr' => '203.0.113.7'], [])] as $property => $value) {
+            (new \ReflectionProperty($limiter, $property))->setValue($limiter, $value);
+        }
+        (new \ReflectionProperty($planner, 'container'))->setValue($planner, new class ($limiter) implements \Psr\Container\ContainerInterface {
+            public function __construct(private object $limiter) {}
+            public function get(string $id): mixed { return $this->limiter; }
+            public function has(string $id): bool { return true; }
+        });
+        $policy = new SearchPlannerPolicy(perClientPerMinute: 2);
+
+        $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'red lamps'), $policy);
+        $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'blue lamps'), $policy);
+        // Already answered: no call, and not counted.
+        $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'red lamps'), $policy);
+        $limited = $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'green lamps'), $policy);
+
+        self::assertSame(2, $calls);
+        self::assertFalse($limited->isUsable(0.0));
+        self::assertSame('green lamps', $limited->query);
+        self::assertStringContainsString('rate limit', (string) $limited->trace?->fallbackReason);
+    }
+
+    #[Test]
+    public function without_a_request_there_is_no_client_to_limit(): void
+    {
+        // A command or a job: the container cannot build a RateLimiter.
+        $planner = $this->planner('{"query": "lamp", "confidence": 0.9}');
+        (new \ReflectionProperty($planner, 'container'))->setValue($planner, new class implements \Psr\Container\ContainerInterface {
+            public function get(string $id): mixed { throw new \RuntimeException('Cannot inject RateLimiter::$request'); }
+            public function has(string $id): bool { return true; }
+        });
+
+        $result = $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'red lamps'), new SearchPlannerPolicy(perClientPerMinute: 1));
+
+        self::assertTrue($result->isUsable(0.5));
+    }
+
     #[Test]
     public function an_empty_query_asks_no_model(): void
     {

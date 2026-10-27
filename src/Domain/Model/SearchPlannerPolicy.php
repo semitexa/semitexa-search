@@ -13,5 +13,8 @@ final readonly class SearchPlannerPolicy
         public float $minConfidence = 0.5,
         public int $timeoutMs = 3000,
         public array $allowedOperators = ['=', 'in', 'between', 'like'],
+        // Model calls a minute per client (the signed-in user, else the
+        // address); 0 = no limit. One client could make every search a paid call.
+        public int $perClientPerMinute = 20,
     ) {}
 }
