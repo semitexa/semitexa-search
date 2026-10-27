@@ -7,6 +7,7 @@ namespace Semitexa\Search\Application\Service\Orm;
 use Semitexa\Orm\Adapter\DatabaseAdapterInterface;
 use Semitexa\Orm\Adapter\SqlIdentifier;
 use Semitexa\Orm\Application\Service\Uuid7;
+use Semitexa\Search\Domain\Contract\GroupedLikeSearchQueryInterface;
 use Semitexa\Search\Domain\Contract\OrmSearchQueryInterface;
 
 /**
@@ -16,7 +17,7 @@ use Semitexa\Search\Domain\Contract\OrmSearchQueryInterface;
  * a bound parameter, and only the comparison operators the translator uses
  * are accepted. Immutable: each call returns a new query.
  */
-final class TableSearchQuery implements OrmSearchQueryInterface
+final class TableSearchQuery implements OrmSearchQueryInterface, GroupedLikeSearchQueryInterface
 {
     private const OPERATORS = ['=', '!=', '<>', '<', '<=', '>', '>=', 'LIKE'];
 

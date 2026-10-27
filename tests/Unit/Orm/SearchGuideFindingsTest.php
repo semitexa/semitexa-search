@@ -37,6 +37,40 @@ final class SearchGuideFindingsTest extends TestCase
         self::assertContains(['tenant_id', '=', 'acme'], $query->wheres);
     }
 
+    /**
+     * whereAnyLike() went into OrmSearchQueryInterface, and a project's own
+     * query class from before it failed to load. Without the grouped match a
+     * text search over one column still works; over several it is refused,
+     * never OR-ed beside the tenant condition.
+     */
+    #[Test]
+    public function a_query_class_from_before_the_grouped_match_still_loads_and_never_leaks(): void
+    {
+        $legacy = new class implements OrmSearchQueryInterface {
+            /** @var list<array{string, string, mixed}> */
+            public array $wheres = [];
+            /** @var list<array{string, string, mixed}> */
+            public array $orWheres = [];
+            public function where(string $column, string $operator, mixed $value): static { $this->wheres[] = [$column, $operator, $value]; return $this; }
+            public function orWhere(string $column, string $operator, mixed $value): static { $this->orWheres[] = [$column, $operator, $value]; return $this; }
+            public function whereIn(string $column, array $values): static { return $this; }
+            public function whereBetween(string $column, mixed $from, mixed $to): static { return $this; }
+            public function orderBy(string $column, string $direction = 'ASC'): static { return $this; }
+            public function limit(int $limit): static { return $this; }
+            public function offset(int $offset): static { return $this; }
+            public function fetchAll(): array { return []; }
+            public function count(): int { return 0; }
+        };
+
+        try {
+            (new OrmSearchTranslator())->apply($legacy, $this->definition(), new SearchRequest(index: 'products', query: 'lamp', tenantId: 'acme'));
+            self::fail('several columns were matched without a group');
+        } catch (\Semitexa\Search\Exception\SearchBackendException $e) {
+            self::assertStringContainsString('GroupedLikeSearchQueryInterface', $e->getMessage());
+        }
+        self::assertSame([], $legacy->orWheres);
+    }
+
     #[Test]
     public function a_global_request_on_a_tenant_index_is_held_to_the_tenant(): void
     {
@@ -120,7 +154,7 @@ final class SearchGuideFindingsTest extends TestCase
     }
 }
 
-final class RecordingSearchQuery implements OrmSearchQueryInterface
+final class RecordingSearchQuery implements OrmSearchQueryInterface, \Semitexa\Search\Domain\Contract\GroupedLikeSearchQueryInterface
 {
     /** @var list<array{string, string, mixed}> */
     public array $wheres = [];
