@@ -95,6 +95,17 @@ final class TableSearchOutOfTheBoxTest extends TestCase
         self::assertSame([$kept], array_map(static fn ($h) => $h->documentId, $result->hits), 'the deleted note is not found; the id is a UUID, the tenant column the model\'s own');
     }
 
+    /** A Tenant index (the default) over a table without the column failed with the database's own error. */
+    #[Test]
+    public function a_tenant_index_over_a_table_with_no_tenant_column_says_what_to_do(): void
+    {
+        $this->orm->getQueryAdapter()->execute('CREATE TABLE search_fixture_plain (id TEXT PRIMARY KEY, title TEXT)');
+
+        $this->expectException(SearchBackendException::class);
+        $this->expectExceptionMessage('its table has no tenant_id column: make the model #[TenantScoped]');
+        $this->backend()->search($this->definition(SearchFixturePlain::class), new SearchRequest(index: 'products', query: 'lamp', tenantId: 'acme'));
+    }
+
     #[Test]
     public function a_global_index_over_tenant_scoped_data_is_refused(): void
     {
@@ -174,4 +185,9 @@ final class SearchFixtureNote
         #[\Semitexa\Orm\Attribute\Column(name: 'removed_at', type: \Semitexa\Orm\Adapter\MySqlType::Datetime, nullable: true)]
         public ?string $removedAt = null,
     ) {}
+}
+
+#[FromTable(name: 'search_fixture_plain')]
+final class SearchFixturePlain
+{
 }

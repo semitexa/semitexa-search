@@ -75,6 +75,16 @@ final class OrmSearchBackend implements SearchBackendInterface
             if ($e instanceof SearchBackendException) {
                 throw $e;
             }
+            // A Tenant index (the default) over a table with no tenant column
+            // failed with the database's own "unknown column" and nothing more.
+            if ($definition->requiresTenantScope() && preg_match('/(unknown column|no such column)\W+(\w+\.)?tenant_id\b/i', $e->getMessage()) === 1) {
+                throw new SearchBackendException(
+                    $definition->entityClass !== null && class_exists($definition->entityClass) && (new \ReflectionClass($definition->entityClass))->getAttributes(\Semitexa\Orm\Attribute\TenantScoped::class) !== []
+                        ? "Index '{$definition->name}' is per tenant, but the table of #[TenantScoped] {$definition->entityClass} has no tenant_id column: name its tenant column with #[TenantScoped(column: '<property>')]."
+                        : "Index '{$definition->name}' is per tenant (scopeMode Tenant, the default), but its table has no tenant_id column: make the model #[TenantScoped] (its column: names the tenant column), or the index SearchScope::Global if the table holds no tenant's data.",
+                    $e,
+                );
+            }
 
             throw new SearchBackendException(
                 "ORM backend search failed for index '{$definition->name}': {$e->getMessage()}",
