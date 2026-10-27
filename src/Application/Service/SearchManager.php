@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Search\Application\Service;
 
 use Semitexa\Core\Attribute\InjectAsReadonly;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Search\Configuration\SearchConfig;
 use Semitexa\Search\Domain\Contract\SearchBackendInterface;
@@ -20,6 +21,7 @@ use Semitexa\Search\Application\Service\SearchTextParser;
 use Semitexa\Search\Domain\Model\SearchPlannerTrace;
 use Semitexa\Search\Domain\Model\SearchRequest;
 use Semitexa\Search\Domain\Model\SearchResult;
+use Semitexa\Tenancy\Configuration\TenancyConfiguration;
 use Semitexa\Tenancy\Context\TenantContext;
 
 #[SatisfiesServiceContract(of: SearchManagerInterface::class)]
@@ -129,6 +131,9 @@ final class SearchManager implements SearchManagerInterface
         }
     }
 
+    /** Once per process: a job searches on every message. */
+    private static bool $warnedNoContext = false;
+
     private function enforceTenantScope(SearchRequest $request, bool $requiresTenant): SearchRequest
     {
         if (!$requiresTenant) {
@@ -142,14 +147,28 @@ final class SearchManager implements SearchManagerInterface
             $request = $request->with(scope: SearchScope::Tenant);
         }
 
+        // A site's own tenant wins: a tenantId given for another one searched
+        // that tenant's rows from inside this one's request. The default
+        // tenant (the root site, no tenant resolved) may name one, as a
+        // command or a job may.
+        $current = TenantContext::get()?->getTenantId();
         if ($request->tenantId !== null) {
+            if ($current !== null && $current !== 'default' && $request->tenantId !== $current) {
+                throw SearchValidationException::fromViolations(["tenantId '{$request->tenantId}' is not the current tenant '{$current}': search another tenant under its own context (bin/semitexa tenant:run)."]);
+            }
+
             return $request;
         }
 
-        $tenantContext = TenantContext::get();
-        $tenantId = $tenantContext?->getTenantId() ?? 'default';
+        // No context on a multi-tenant install (a command, a job queued
+        // without one) searched tenant 'default' without a word. Tenancy
+        // means just that by no tenant, so it still does, and says so.
+        if ($current === null && !self::$warnedNoContext && TenancyConfiguration::fromEnv()->enabled) {
+            self::$warnedNoContext = true;
+            StaticLoggerBridge::warning('search', "A tenant index was searched with no tenant context: tenant 'default' was searched. Run it under the tenant (bin/semitexa tenant:run), or pass tenantId.");
+        }
 
-        return $request->with(tenantId: $tenantId);
+        return $request->with(tenantId: $current ?? 'default');
     }
 
     private function shouldUsePlanner(

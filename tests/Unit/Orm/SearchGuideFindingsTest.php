@@ -42,11 +42,16 @@ final class SearchGuideFindingsTest extends TestCase
     {
         // The scope was reset to Tenant and the tenant id left empty: the
         // translator then added no tenant condition and searched everyone.
-        $scoped = (new \ReflectionMethod(SearchManager::class, 'enforceTenantScope'))
-            ->invoke((new \ReflectionClass(SearchManager::class))->newInstanceWithoutConstructor(), new SearchRequest(index: 'products', scope: SearchScope::Global), true);
+        \Semitexa\Tenancy\Context\TenantContextStore::shared()->set(\Semitexa\Tenancy\Context\TenantContext::fromResolution('acme', 'test'));
+        try {
+            $scoped = (new \ReflectionMethod(SearchManager::class, 'enforceTenantScope'))
+                ->invoke((new \ReflectionClass(SearchManager::class))->newInstanceWithoutConstructor(), new SearchRequest(index: 'products', scope: SearchScope::Global), true);
+        } finally {
+            \Semitexa\Tenancy\Context\TenantContextStore::shared()->clear();
+        }
 
         self::assertSame(SearchScope::Tenant, $scoped->scope);
-        self::assertNotNull($scoped->tenantId, 'a Global request on a tenant index searched every tenant');
+        self::assertSame('acme', $scoped->tenantId, 'a Global request on a tenant index searched every tenant');
     }
 
     #[Test]
