@@ -6,6 +6,8 @@ namespace Semitexa\Search\Application\Service\Llm;
 
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
+use Semitexa\Core\Container\Exception\ExecutionContextNotReadyException;
+use Semitexa\Core\Container\Exception\InjectionException;
 use Psr\Container\ContainerInterface;
 use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Core\RateLimit\RateLimiter;
@@ -69,9 +71,16 @@ final class LlmSearchQueryPlanner implements SearchQueryPlannerInterface
         if ($policy->perClientPerMinute > 0 && isset($this->container)) {
             try {
                 $limiter = $this->container->get(RateLimiter::class);
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
                 // No request (a command, a job): no client to count, and the
-                // planner kept working there before the limit.
+                // planner kept working there before the limit. Only these two
+                // say so (InjectionException is not in the PSR @throws, hence
+                // the test rather than a typed catch): any other failure to
+                // build the limiter goes up, and SearchManager searches the
+                // query as typed — never an unmetered model call.
+                if (!$e instanceof InjectionException && !$e instanceof ExecutionContextNotReadyException) {
+                    throw $e;
+                }
             }
             $decision = $limiter?->attempt('search-planner', $policy->perClientPerMinute, 60, RateLimitKey::User);
             if ($decision !== null && !$decision->allowed) {

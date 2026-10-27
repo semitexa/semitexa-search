@@ -38,8 +38,18 @@ final class LlmProviderPlannerBridge implements LlmPlannerMessageBridgeInterface
             throw new \RuntimeException('semitexa/llm is not installed: the search planner has no model to ask.');
         }
         $resolver = $this->container->get(self::RESOLVER);
+        if (!is_object($resolver)) {
+            throw new \RuntimeException('The container gave no LlmProviderResolver: the search planner has no model to ask.');
+        }
         $request = self::REQUEST;
-        $provider = method_exists($resolver, 'deciderProvider') ? $resolver->deciderProvider() : $resolver->provider();
+        $provider = match (true) {
+            method_exists($resolver, 'deciderProvider') => $resolver->deciderProvider(),
+            method_exists($resolver, 'provider') => $resolver->provider(),
+            default => null,
+        };
+        if (!is_object($provider)) {
+            throw new \RuntimeException('The LLM resolver gave no provider: the search planner has no model to ask.');
+        }
         // A provider that cannot be held to the planner's timeout is not asked:
         // the local Ollama provider waited LLM_TIMEOUT × its retries (two
         // minutes by default) on every search.

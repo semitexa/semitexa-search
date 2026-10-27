@@ -20,16 +20,22 @@ final class SearchManagerTenantScopeTest extends TestCase
 {
     private string|false $tenancyEnabled;
 
+    /** SearchManager's once-per-worker warning flag as it was: static, so put back after */
+    private bool $warnedNoContext;
+
     protected function setUp(): void
     {
         $this->tenancyEnabled = getenv('TENANCY_ENABLED');
-        (new \ReflectionProperty(SearchManager::class, 'warnedNoContext'))->setValue(null, false);
+        $warned = new \ReflectionProperty(SearchManager::class, 'warnedNoContext');
+        $this->warnedNoContext = (bool) $warned->getValue();
+        $warned->setValue(null, false);
     }
 
     protected function tearDown(): void
     {
         TenantContextStore::shared()->clear();
         putenv($this->tenancyEnabled === false ? 'TENANCY_ENABLED' : 'TENANCY_ENABLED=' . $this->tenancyEnabled);
+        (new \ReflectionProperty(SearchManager::class, 'warnedNoContext'))->setValue(null, $this->warnedNoContext);
     }
 
     #[Test]

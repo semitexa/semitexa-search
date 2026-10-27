@@ -142,13 +142,46 @@ final class LlmSearchQueryPlannerTest extends TestCase
         // A command or a job: the container cannot build a RateLimiter.
         $planner = $this->planner('{"query": "lamp", "confidence": 0.9}');
         (new \ReflectionProperty($planner, 'container'))->setValue($planner, new class implements \Psr\Container\ContainerInterface {
-            public function get(string $id): mixed { throw new \RuntimeException('Cannot inject RateLimiter::$request'); }
+            public function get(string $id): mixed
+            {
+                throw new \Semitexa\Core\Container\Exception\InjectionException(\Semitexa\Core\RateLimit\RateLimiter::class, 'request', \Semitexa\Core\Request::class, 'mutable', 'Cannot inject RateLimiter::$request');
+            }
             public function has(string $id): bool { return true; }
         });
 
         $result = $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'red lamps'), new SearchPlannerPolicy(perClientPerMinute: 1));
 
         self::assertTrue($result->isUsable(0.5));
+        self::assertSame('lamp', $result->query);
+    }
+
+    /** Any other failure to build the limiter read as "no request" and made an unmetered model call. */
+    #[Test]
+    public function a_limiter_that_cannot_be_built_asks_no_model(): void
+    {
+        $calls = 0;
+        $planner = new LlmSearchQueryPlanner();
+        (new \ReflectionProperty($planner, 'bridge'))->setValue($planner, new class ($calls) implements LlmPlannerBridgeInterface {
+            public function __construct(private int &$calls) {}
+            public function execute(string $prompt, int $timeoutMs): string
+            {
+                $this->calls++;
+
+                return '{"query": "lamp", "confidence": 0.9}';
+            }
+        });
+        (new \ReflectionProperty($planner, 'container'))->setValue($planner, new class implements \Psr\Container\ContainerInterface {
+            public function get(string $id): mixed { throw new \Semitexa\Core\Container\NotFoundException('no RateLimiter registered'); }
+            public function has(string $id): bool { return false; }
+        });
+
+        try {
+            $planner->plan($this->definition(), new SearchRequest(index: 'products', query: 'red lamps'), new SearchPlannerPolicy(perClientPerMinute: 1));
+            self::fail('the limiter failure was swallowed');
+        } catch (\Semitexa\Core\Container\NotFoundException $e) {
+            self::assertSame('no RateLimiter registered', $e->getMessage());
+        }
+        self::assertSame(0, $calls);
     }
 
     #[Test]
