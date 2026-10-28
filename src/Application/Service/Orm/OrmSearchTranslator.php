@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Search\Application\Service\Orm;
 
 use Semitexa\Search\Domain\Contract\OrmSearchQueryInterface;
+use Semitexa\Search\Exception\SearchBackendException;
+use Semitexa\Search\Domain\Contract\GroupedLikeSearchQueryInterface;
 use Semitexa\Search\Domain\Enum\SearchMatchStrategy;
 use Semitexa\Search\Domain\Enum\SearchScope;
 use Semitexa\Search\Domain\Model\SearchFieldDefinition;
@@ -22,7 +24,7 @@ final class OrmSearchTranslator
         SearchIndexDefinition $definition,
         SearchRequest $request,
     ): OrmSearchQueryInterface {
-        $query = $this->applyTenantScope($query, $request);
+        $query = $this->applyTenantScope($query, $definition, $request);
         $query = $this->applyFilters($query, $definition, $request);
         $query = $this->applyTextQuery($query, $definition, $request);
         $query = $this->applySorting($query, $definition, $request);
@@ -31,8 +33,14 @@ final class OrmSearchTranslator
         return $query;
     }
 
-    private function applyTenantScope(OrmSearchQueryInterface $query, SearchRequest $request): OrmSearchQueryInterface
+    private function applyTenantScope(OrmSearchQueryInterface $query, SearchIndexDefinition $definition, SearchRequest $request): OrmSearchQueryInterface
     {
+        // The index decides, not only the request: a request that reached a
+        // backend without SearchManager (scope Global, or no tenant id) would
+        // otherwise have searched every tenant.
+        if ($definition->requiresTenantScope() && ($request->scope !== SearchScope::Tenant || $request->tenantId === null)) {
+            throw new \LogicException("Index '{$definition->name}' is per tenant and the request names no tenant.");
+        }
         if ($request->scope === SearchScope::Tenant && $request->tenantId !== null) {
             $query = $query->where('tenant_id', '=', $request->tenantId);
         }
@@ -111,13 +119,30 @@ final class OrmSearchTranslator
             return $query;
         }
 
+        $patternByColumn = [];
         foreach ($searchableFields as $field) {
-            $column = $field->resolvedColumn();
-            $pattern = $this->buildLikePattern($field->matchStrategy, $request->query);
-            $query = $query->orWhere($column, 'LIKE', $pattern);
+            $patternByColumn[$field->resolvedColumn()] = $this->buildLikePattern($field->matchStrategy, $request->query);
         }
 
-        return $query;
+        // One group AND-ed with the tenant and filters: as one orWhere per
+        // field, `lamp status:active` read (tenant AND status) OR title LIKE,
+        // and inactive lamps came back.
+        if ($query instanceof GroupedLikeSearchQueryInterface) {
+            return $query->whereAnyLike($patternByColumn);
+        }
+        // A project's own query class from before the grouped match: one
+        // column is a plain condition; several would need the OR that leaked.
+        if (count($patternByColumn) === 1) {
+            return $query->where((string) array_key_first($patternByColumn), 'LIKE', reset($patternByColumn));
+        }
+
+        throw new SearchBackendException(sprintf(
+            "Index '%s' searches %d columns, and %s cannot match them as one group: implement %s.",
+            $definition->name,
+            count($patternByColumn),
+            $query::class,
+            GroupedLikeSearchQueryInterface::class,
+        ));
     }
 
     private function buildLikePattern(SearchMatchStrategy $strategy, string $query): string

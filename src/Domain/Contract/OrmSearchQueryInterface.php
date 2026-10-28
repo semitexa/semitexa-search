@@ -10,6 +10,8 @@ interface OrmSearchQueryInterface
 
     public function orWhere(string $column, string $operator, mixed $value): static;
 
+    /** Matching across several columns: GroupedLikeSearchQueryInterface. */
+
     /**
      * @param array<int, scalar|null> $values
      */

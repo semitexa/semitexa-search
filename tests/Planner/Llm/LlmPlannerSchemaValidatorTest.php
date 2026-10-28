@@ -104,4 +104,17 @@ final class LlmPlannerSchemaValidatorTest extends TestCase
         $this->assertNotEmpty($violations);
         $this->assertStringContainsString('sort direction', $violations[0]);
     }
+
+    public function testMalformedTypesAreViolationsNotErrors(): void
+    {
+        // A list for filters, a number for a sort field or direction threw
+        // a TypeError instead of coming back as violations.
+        $violations = $this->validator->validate([
+            'filters' => ['status'],
+            'sort' => [['field' => 42], ['field' => 'name', 'direction' => 1]],
+        ], $this->definition, $this->policy);
+
+        $this->assertNotEmpty($violations);
+        $this->assertCount(4, $violations, implode('; ', $violations)); // name is also not sortable in this index
+    }
 }

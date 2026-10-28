@@ -17,6 +17,7 @@ final readonly class SearchConfig
         public int $plannerTimeoutMs = 3000,
         public float $plannerMinConfidence = 0.5,
         public bool $observabilityEnabled = true,
+        public int $plannerRateLimit = 20,
     ) {}
 
     public static function fromEnvironment(): self
@@ -29,6 +30,16 @@ final readonly class SearchConfig
         $plannerTimeoutMs = (int) Environment::getEnvValue('SEARCH_PLANNER_TIMEOUT_MS', '3000');
         $plannerMinConfidence = (float) Environment::getEnvValue('SEARCH_PLANNER_MIN_CONFIDENCE', '0.5');
         $observabilityEnabled = Environment::getEnvValue('SEARCH_OBSERVABILITY_ENABLED', '1') === '1';
+        // Read strictly: `(int)` made a typo ("20/min", "twenty") into 0,
+        // which here means "no limit" — the cap on paid model calls was gone
+        // and nothing said so. Set but blank is the default.
+        $rawRateLimit = trim((string) Environment::getEnvValue('SEARCH_PLANNER_RATE_LIMIT', '20'));
+        $plannerRateLimit = filter_var($rawRateLimit === '' ? '20' : $rawRateLimit, FILTER_VALIDATE_INT);
+        if ($plannerRateLimit === false) {
+            throw new \InvalidArgumentException(
+                "SEARCH_PLANNER_RATE_LIMIT must be a whole number (0 = no limit), got '{$rawRateLimit}'"
+            );
+        }
 
         if ($defaultLimit < 1 || $defaultLimit > $maxResultLimit) {
             throw new \InvalidArgumentException(
@@ -54,6 +65,12 @@ final readonly class SearchConfig
             );
         }
 
+        if ($plannerRateLimit < 0) {
+            throw new \InvalidArgumentException(
+                "SEARCH_PLANNER_RATE_LIMIT must be 0 (no limit) or positive, got {$plannerRateLimit}"
+            );
+        }
+
         return new self(
             defaultLimit: $defaultLimit,
             maxQueryLength: $maxQueryLength,
@@ -63,6 +80,7 @@ final readonly class SearchConfig
             plannerTimeoutMs: $plannerTimeoutMs,
             plannerMinConfidence: $plannerMinConfidence,
             observabilityEnabled: $observabilityEnabled,
+            plannerRateLimit: $plannerRateLimit,
         );
     }
 }

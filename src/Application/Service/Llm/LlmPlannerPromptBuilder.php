@@ -14,9 +14,10 @@ final class LlmPlannerPromptBuilder
 {
     private ?PromptRenderer $renderer = null;
 
+    /** $userQuery null: the query goes as the user message, and the prompt says so. */
     public function build(
         SearchIndexDefinition $definition,
-        string $userQuery,
+        ?string $userQuery,
         SearchPlannerPolicy $policy,
     ): string {
         $this->renderer ??= new PromptRenderer();

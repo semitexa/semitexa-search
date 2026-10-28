@@ -34,7 +34,7 @@ final class SearchPlannerPrompt implements BoundPromptInterface
     /**
      * @param list<array{name: string, type: string, searchable: bool, filterable: bool, sortable: bool}> $fields
      */
-    public function withData(string $indexName, string $documentType, array $fields, string $operators, string $userQuery): self
+    public function withData(string $indexName, string $documentType, array $fields, string $operators, ?string $userQuery): self
     {
         return new self($indexName, $documentType, $fields, $operators, $userQuery);
     }
@@ -65,6 +65,7 @@ final class SearchPlannerPrompt implements BoundPromptInterface
         return (string) $this->operators;
     }
 
+    /** '' when the query goes as the user message. */
     public function userQuery(): string
     {
         return (string) $this->userQuery;

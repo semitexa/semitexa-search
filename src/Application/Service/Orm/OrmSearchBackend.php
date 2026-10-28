@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Search\Application\Service\Orm;
 
+use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Search\Domain\Contract\SearchBackendInterface;
 use Semitexa\Search\Domain\Contract\OrmSearchQueryFactoryInterface;
@@ -16,13 +17,16 @@ use Semitexa\Search\Domain\Model\SearchResult;
 #[SatisfiesServiceContract(of: SearchBackendInterface::class)]
 final class OrmSearchBackend implements SearchBackendInterface
 {
-    protected ?OrmSearchQueryFactoryInterface $queryFactory = null;
+    // Injected: it carried no attribute, so the backend never had a factory
+    // and reported every index as unsupported.
+    #[InjectAsReadonly]
+    protected OrmSearchQueryFactoryInterface $queryFactory;
     private ?OrmSearchTranslator $translator = null;
     private ?OrmRankingStrategy $rankingStrategy = null;
 
     public function supports(SearchIndexDefinition $definition): bool
     {
-        return $definition->backend === 'orm' && $this->queryFactory !== null;
+        return $definition->backend === 'orm' && isset($this->queryFactory);
     }
 
     public function search(SearchIndexDefinition $definition, SearchRequest $request): SearchResult
@@ -32,7 +36,7 @@ final class OrmSearchBackend implements SearchBackendInterface
         $startTime = hrtime(true);
 
         try {
-            if ($this->queryFactory === null) {
+            if (!isset($this->queryFactory)) {
                 throw new SearchBackendException(
                     "ORM backend is not available for index '{$definition->name}' because no query factory is configured.",
                 );
@@ -46,7 +50,9 @@ final class OrmSearchBackend implements SearchBackendInterface
 
             $hits = $this->mapHits($definition, $rows, $request->query, $rankingStrategy);
 
-            if ($request->query !== null) {
+            // Relevance orders the page only when the caller asked for no order:
+            // an explicit sort was re-sorted away whenever there was a query.
+            if ($request->query !== null && $request->sort === []) {
                 $hits = $rankingStrategy->sortByRelevance($hits);
             }
 
@@ -68,6 +74,16 @@ final class OrmSearchBackend implements SearchBackendInterface
         } catch (\Throwable $e) {
             if ($e instanceof SearchBackendException) {
                 throw $e;
+            }
+            // A Tenant index (the default) over a table with no tenant column
+            // failed with the database's own "unknown column" and nothing more.
+            if ($definition->requiresTenantScope() && preg_match('/(unknown column|no such column)\W+(\w+\.)?tenant_id\b/i', $e->getMessage()) === 1) {
+                throw new SearchBackendException(
+                    $definition->entityClass !== null && class_exists($definition->entityClass) && (new \ReflectionClass($definition->entityClass))->getAttributes(\Semitexa\Orm\Attribute\TenantScoped::class) !== []
+                        ? "Index '{$definition->name}' is per tenant, but the table of #[TenantScoped] {$definition->entityClass} has no tenant_id column: name its tenant column with #[TenantScoped(column: '<property>')]."
+                        : "Index '{$definition->name}' is per tenant (scopeMode Tenant, the default), but its table has no tenant_id column: make the model #[TenantScoped] (its column: names the tenant column), or the index SearchScope::Global if the table holds no tenant's data.",
+                    $e,
+                );
             }
 
             throw new SearchBackendException(

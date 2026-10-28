@@ -35,6 +35,12 @@
     "extra": {
         "semitexa-module": {
             "template_alias": "semitexa-search"
+        },
+        "semitexa": {
+            "floors": {
+                "semitexa/core": "next",
+                "semitexa/orm": "next"
+            }
         }
     },
     "keywords": [

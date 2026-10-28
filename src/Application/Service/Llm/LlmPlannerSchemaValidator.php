@@ -35,7 +35,14 @@ final class LlmPlannerSchemaValidator
         }
 
         if (isset($parsed['filters']) && is_array($parsed['filters'])) {
+            // A model's JSON is checked, never trusted to have the right
+            // types: a list for filters, a number for a field or direction
+            // threw a TypeError instead of coming back as violations.
             foreach ($parsed['filters'] as $fieldName => $value) {
+                if (!is_string($fieldName)) {
+                    $violations[] = 'filters must be an object keyed by field name';
+                    continue;
+                }
                 if (!$definition->hasField($fieldName)) {
                     $violations[] = "Planner referenced unknown field '{$fieldName}'";
                     continue;
@@ -50,7 +57,7 @@ final class LlmPlannerSchemaValidator
 
         if (isset($parsed['sort']) && is_array($parsed['sort'])) {
             foreach ($parsed['sort'] as $sortItem) {
-                if (!is_array($sortItem) || !isset($sortItem['field'])) {
+                if (!is_array($sortItem) || !isset($sortItem['field']) || !is_string($sortItem['field'])) {
                     $violations[] = 'Each sort entry must have a field key';
                     continue;
                 }
@@ -63,9 +70,8 @@ final class LlmPlannerSchemaValidator
                 }
 
                 if (isset($sortItem['direction'])) {
-                    $dir = strtoupper($sortItem['direction']);
-                    if (!in_array($dir, ['ASC', 'DESC'], true)) {
-                        $violations[] = "Invalid sort direction '{$sortItem['direction']}'";
+                    if (!is_string($sortItem['direction']) || !in_array(strtoupper($sortItem['direction']), ['ASC', 'DESC'], true)) {
+                        $violations[] = 'Invalid sort direction: use ASC or DESC';
                     }
                 }
             }
