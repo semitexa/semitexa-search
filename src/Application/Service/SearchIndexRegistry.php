@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Search\Application\Service;
 
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
+use Semitexa\Core\Attribute\WorkerState;
 use Semitexa\Search\Domain\Contract\SearchIndexRegistryInterface;
 use Semitexa\Search\Domain\Model\SearchIndexDefinition;
 use Semitexa\Search\Exception\SearchIndexNotFoundException;
@@ -13,6 +14,7 @@ use Semitexa\Search\Exception\SearchIndexNotFoundException;
 final class SearchIndexRegistry implements SearchIndexRegistryInterface
 {
     /** @var array<string, SearchIndexDefinition> */
+    #[WorkerState('Index definitions keyed by index name: schema only (fields, scope mode, backend), no tenant id or row data; an application registers them at boot.')]
     private array $indexes = [];
 
     public function get(string $indexName): SearchIndexDefinition
